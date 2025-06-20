@@ -1,4 +1,4 @@
-module github.com/hiphopzeliboba/csvenricherprocessor
+module github.com/hiphopzeliboba/csvenricherprocessorr
 
 go 1.23.0
 
