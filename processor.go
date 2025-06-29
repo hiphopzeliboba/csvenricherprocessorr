@@ -157,18 +157,57 @@ func (p *csvEnricherProcessor) processTraces(ctx context.Context, td ptrace.Trac
 	resourceSpans := td.ResourceSpans()
 	for i := 0; i < resourceSpans.Len(); i++ {
 		resourceSpan := resourceSpans.At(i)
-		ilSpans := resourceSpan.ScopeSpans()
-		for j := 0; j < ilSpans.Len(); j++ {
-			spans := ilSpans.At(j).Spans()
-			for k := 0; k < spans.Len(); k++ {
-				span := spans.At(k)
-				p.enrichSpan(span)
+
+		// --- добавлено: enrichment на уровне resource
+		resourceAttrs := resourceSpan.Resource().Attributes()
+		p.enrichResource(resourceAttrs)
+
+		// --- удалено: enrichment на уровне span
+		/*
+			ilSpans := resourceSpan.ScopeSpans()
+			for j := 0; j < ilSpans.Len(); j++ {
+				spans := ilSpans.At(j).Spans()
+				for k := 0; k < spans.Len(); k++ {
+					span := spans.At(k)
+					p.enrichSpan(span)
+				}
 			}
-		}
+		*/
+
 	}
 	return td, nil
 }
 
+// --- добавлено: новая функция, обогащает Resource.Attributes
+func (p *csvEnricherProcessor) enrichResource(resourceAttrs pcommon.Map) {
+	matchValue, exists := resourceAttrs.Get(p.config.MatchField)
+	if !exists || matchValue.Type() != pcommon.ValueTypeStr {
+		return
+	}
+
+	matchKey := matchValue.Str()
+	if matchKey == "" {
+		return
+	}
+
+	recordIdx, found := p.matchIndex[matchKey]
+	if !found {
+		p.logger.Debug("No matching value found in CSV", zap.String("value for match", matchKey))
+		return
+	}
+
+	record := p.csvData[recordIdx]
+
+	for _, column := range p.config.EnrichColumns {
+		if value, ok := record[column]; ok {
+			resourceAttrs.PutStr(column, value)
+		} else {
+			p.logger.Warn("Column not found in CSV record", zap.String("column", column))
+		}
+	}
+}
+
+// --- deprecated: функция обогащения Span.Attributes
 func (p *csvEnricherProcessor) enrichSpan(span ptrace.Span) {
 	attrs := span.Attributes()
 
